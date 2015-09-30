@@ -1,4 +1,4 @@
-Perform multipart upload to Amazon S3 and compatible of data read from stdin.
+Perform multipart upload to Amazon S3 or any compatible storage of data read from stdin.
 Use config from s3cmd (by default - $HOME/.s3cfg)
 
 Example: tar -C / -cpjO /home | stdin2s3 -c /path/s3cfg s3://bucket/backup.tar.bz2
@@ -11,4 +11,5 @@ positional arguments:
 optional arguments:
   -h, --help   show this help message and exit
   -c CONFPATH  path to the config file.
-
+  -q, --quiet   quiet output
+  -s, --silent  no output at all
