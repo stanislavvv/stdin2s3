@@ -1,0 +1,139 @@
+#!/usr/bin/env python
+
+# Perform multipart upload to Amazon S3 of data read from stdin.
+#
+# Example usage:
+# 	tar -C / -cpjO /home | stdin2s3 -c /home/user/.s3cfg s3://bucket/backup-home.tar.bz2
+
+import argparse
+import os
+import ConfigParser
+import urlparse
+
+import boto
+from boto.s3.key import Key
+from boto.s3.connection import S3Connection
+from boto.s3.connection import OrdinaryCallingFormat
+from boto.exception import *
+import sys
+import optparse
+import time
+import traceback
+import hashlib
+import math
+from cStringIO import StringIO
+
+cfg = ConfigParser.ConfigParser()
+
+def upload(args):
+	bucketname=urlparse.urlparse(args.target).hostname
+	objectname=urlparse.urlparse(args.target).path
+
+	# Establish connection to S3
+	try:
+		s3_connection = boto.connect_s3(aws_access_key_id=cfg.get('default', 'access_key'),
+                        aws_secret_access_key=cfg.get('default', 'secret_key'),
+                        host=cfg.get('default', 'host_base'),
+                        port=80,
+                        is_secure=False,
+                        calling_format=OrdinaryCallingFormat())
+	except:
+		print traceback.format_exc()
+		print "Error: Connection to S3 could not be established."
+		sys.exit(4)
+	
+	# Check if the bucket is available
+	try:
+		s3_bucket = s3_connection.get_bucket(bucketname)
+		if not s3_bucket:
+			raise Exception('BucketLookupFailed')
+	except:
+		print traceback.format_exc()
+		print "Error: Bucket %s is not available." % bucketname
+		sys.exit(5)
+	
+	if s3_bucket.get_key(objectname):
+		print "Error: Object %s exists in bucket %s." % (objectname, bucketname)
+		sys.exit(6)
+	
+	# Initiate the upload
+	try:
+		s3_upload     = s3_bucket.initiate_multipart_upload(objectname)
+	except:
+		print traceback.format_exc()
+		print "Error: Multipart upload could not be initiated."
+		sys.exit(7)
+
+	# Read options.size bytes from stdin and upload it as a multipart to S3.
+	# The md5sum of each part is calculated, and the md5sum of the concatinated
+	# checksums of each part is calculated on the way to verify the files
+	# integrity after upload by comparing calculated checksum with
+	# eTag of uploaded object.
+
+	uploadPart = 0
+	uploadHash = hashlib.md5()
+	
+	#5Mb chunk size
+	options_size = 1048576*5
+	
+	# timeout 5 sec before try again
+	options_time = 5
+	
+	printByteLength = str(math.ceil(math.log10(options_size)))
+	while True:
+		bytes = sys.stdin.read(options_size)
+		if not bytes:
+			print "Reached end of inputstream."
+			break
+			
+		uploadPart += 1		
+		uploadPartHash = hashlib.md5(bytes)
+		uploadHash.update(uploadPartHash.digest())
+		
+		# If upload fails, try again.
+		uploadPartTry = 0
+		while True:
+			try:
+				uploadPartTry+=1
+				print ("Upload part %010d - %"+printByteLength+"d Bytes - %s - Try %d") % (uploadPart,len(bytes),uploadPartHash.hexdigest(),uploadPartTry)		
+				s3_upload.upload_part_from_file(StringIO(bytes),uploadPart)
+				break
+			except:
+				print traceback.format_exc()
+				print "Error uploading part. Try again in %d seconds..." % options_time
+				time.sleep(options_time)
+
+
+	# Complete upload and check integrity
+	try:
+		s3_upload.complete_upload()
+
+		# Compare the eTag of the uploaded object with the localy calculated md5sum.
+		checksum_remote = s3_bucket.get_key(objectname).etag.strip('"')
+		checksum_local  = uploadHash.hexdigest()+"-"+str(uploadPart)
+		if checksum_remote <> checksum_local:
+			print traceback.format_exc()
+			print "Error: Local checksum differs from object's eTag:"
+			print "Local : %s" % checksum_local
+			print "Remote: %s" % checksum_remote
+			print "The upload might be corrupt."
+			raise Exception('ChecksumMismatch')
+			
+		print "Upload completed"
+	except:
+		print traceback.format_exc()
+		print "Error: Error while completing upload."
+		sys.exit(8)
+
+def main(argv):
+	parser = argparse.ArgumentParser(usage='%(prog)s [-c config] target', formatter_class=argparse.RawDescriptionHelpFormatter)
+	parser.add_argument('-c', dest='confpath', type=str, default=None, help='path to the config file. Default: %s/.s3cfg' % os.getenv('HOME'))
+	parser.add_argument('target', type=str, help='s3://bucket/object')
+	args = parser.parse_args()
+
+	cfg.read(args.confpath or os.path.join(os.getenv('HOME'), '.s3cfg'))
+	
+	upload(args)
+
+if __name__ == '__main__':
+	main(sys.argv)

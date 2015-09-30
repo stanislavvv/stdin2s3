@@ -1,22 +1,14 @@
-Perform multipart upload to Amazon S3 of data read from stdin.
+Perform multipart upload to Amazon S3 and compatible of data read from stdin.
+Use config from s3cmd (by default - $HOME/.s3cfg)
 
-Example: tar -C / -cpjO /home | 2s3 -k aws.key -b com-example-backup -o home.tar.bz2
+Example: tar -C / -cpjO /home | stdin2s3 -c /path/s3cfg s3://bucket/backup.tar.bz2
 
-Usage: 2s3 -k AWS_KEY_FILE -b BUCKET_NAME -o OBJECT_NAME [-s CHUNK_SIZE] [-t SECONDS]
+usage: stdin2s3 [-c config] target
 
-Options:
-  -h, --help            show this help message and exit
-  -k AWS_KEY_FILE, --keyfile=AWS_KEY_FILE
-                        File that contains: <AWS_KEY>:<AWS_SECRET> for S3
-                        access.
-  -b BUCKET_NAME, --bucket=BUCKET_NAME
-                        Name of the target bucket.
-  -o OBJECT_NAME, --object=OBJECT_NAME
-                        Name of the target object.
-  -s CHUNK_SIZE, --size=CHUNK_SIZE
-                        Split upload in CHUNK_SIZE bytes. Default is 5 MiB.
-  -t SECONDS, --time=SECONDS
-                        Time in seconds to wait until retry upload a failed
-                        part again. Default is 5.
-  -d, --debug           Print debug information
+positional arguments:
+  target       s3://bucket/object
+
+optional arguments:
+  -h, --help   show this help message and exit
+  -c CONFPATH  path to the config file.
 
