@@ -1,5 +1,7 @@
 Perform multipart upload to Amazon S3 or any compatible storage of data read from stdin.
-Use config from s3cmd (by default - $HOME/.s3cfg)
+Use config from s3cmd (by default - $HOME/.s3cfg).
+Need some python libraries (see import lines in source).
+Licensed in Public Domain.
 
 Example: tar -C / -cpjO /home | stdin2s3 -c /path/s3cfg s3://bucket/backup.tar.bz2
 
